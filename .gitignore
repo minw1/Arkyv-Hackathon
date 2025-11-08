@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+chroma_langchain_db/
+*.pyc
+.venv/
+.env
+*.db
+*.pkl
+
+# Streamlit cache
+.streamlit/
+
+# macOS
+.DS_Store
