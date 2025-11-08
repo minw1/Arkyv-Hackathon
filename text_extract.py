@@ -14,7 +14,7 @@ else:
 
 parts = re.split(r'\n(?=\d+:\d+)', text)
 
-if not os.path.exists("chunks.pkl"):
-    with open("chunks.pkl", "wb") as file:
+if not os.path.exists("ek_chunks.pkl"):
+    with open("ek_chunks.pkl", "wb") as file:
         pickle.dump(parts, file)
 
