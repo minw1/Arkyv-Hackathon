@@ -39,6 +39,7 @@ class ChecklistItem(Base):
     # store JSON / delimited text for hackathon speed
     bbr_sections = Column(Text)   # e.g. '["5:12","5:251"]' or "5:12;5:251"
     bbr_texts = Column(Text)      # e.g. '["text1","text2"]' or joined text
+    assignment = Column(String, nullable=False)
 
     checklist = relationship("Checklist", back_populates="items")
 
@@ -104,6 +105,7 @@ def add_item(
     category: str,
     bbr_sections: str = "",
     bbr_texts: str = "",
+    assignment: str = "",
 ):
     item = ChecklistItem(
         checklist_id=checklist_id,
@@ -111,6 +113,7 @@ def add_item(
         category=category,
         bbr_sections=bbr_sections,
         bbr_texts=bbr_texts,
+        assignment=assignment
     )
     db.add(item)
 

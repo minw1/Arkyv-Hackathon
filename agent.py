@@ -87,6 +87,29 @@ def get_category(EK_item: str):
     )
     return result["messages"][-1].content
 
+def get_assignment(employee_info : str, EK_item: str):
+    system_message = (
+        "You are an expert in Swedish construction."
+        "You have a document detailing employee capabilities and the user will give you a specific architectural task."
+        "Your job is to assign one employee to the task based on his or her capabilities."
+        "Output the full name of one employee from the document, or Unknown if no employee is likely to be capable of the given task."
+        "Example output: Magda Lindström"
+        "If the task requires daylight calculation, output: AI Daylight Calculation Agent"
+        f"Employee Capability Document: {employee_info}"
+    )
+
+    # 3. Call the agent with system + user
+    result = agent.invoke(
+        {
+            "messages": [
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": EK_item},
+            ]
+        }
+    )
+    return result["messages"][-1].content
+
+
 if __name__ == "__main__":
     msgs, docs = get_sections(
         "Planera för goda för goda förhållanden avseende dagsljus och solljus, i bostaden och på uteplatsen."
