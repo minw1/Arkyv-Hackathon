@@ -217,9 +217,10 @@ def process_egenkontroll_document(pdf_path):
     """
     Main function to process egenkontroll documents
     """
+    '''
     # Extract text from PDF
     cache_file = pdf_path.replace('.pdf', '_text.pkl')
-    
+
     if not os.path.exists(cache_file):
         print(f"Extracting text from {pdf_path}...")
         text = extract_text(pdf_path)
@@ -229,6 +230,8 @@ def process_egenkontroll_document(pdf_path):
         print(f"Loading cached text...")
         with open(cache_file, "rb") as f:
             text = pickle.load(f)
+    '''
+    text = extract_text(pdf_path)
     
     # Extract control points using AI
     print("Extracting control points...")
@@ -251,6 +254,7 @@ def process_egenkontroll_document(pdf_path):
     
     control_points = unique_control_points
     
+    '''
     # Save results
     output_file = pdf_path.replace('.pdf', '_kontrollpunkter.json')
     with open(output_file, 'w', encoding='utf-8') as f:
@@ -263,7 +267,7 @@ def process_egenkontroll_document(pdf_path):
     print("\n=== First 5 control points ===")
     for i, cp in enumerate(control_points[:5], 1):
         print(f"\n{i}. {cp[:200]}{'...' if len(cp) > 200 else ''}")
-    
+    '''
     return control_points
 
 

@@ -19,7 +19,7 @@ vector_store = Chroma(
 )
 
 # --- Base model + agent (no retrieval in middleware now) ---
-model = init_chat_model("gpt-4.1")
+model = init_chat_model("gpt-4.1", temperature=0.0)
 agent = create_agent(model, tools=[])
 
 def get_sections(EK_item: str):
@@ -68,6 +68,24 @@ def get_sections(EK_item: str):
     # 4. Return both the model message and the raw retrieved docs for inspection
     return result["messages"][-1].content, dict([(extract_prefix(doc.page_content), doc.page_content) for doc in retrieved_docs])
 
+def get_category(EK_item: str):
+    system_message = (
+        "You are an expert in Swedish construction."
+        "A user will give you an inspection item and you must categorize it into one of the following categories:"
+        "[\"beständighet\", \"hälsa och inomhusklimat\", \"ljusinsläpp\",\"miljöppåverkan\", \"resurshållning\", \"bullerskydd\", \"energihushållning\", \"fuktskydd\", \"trafik och kommunikation\", \"annat\"]"
+        "You must always output one of these options. Do not print quotation marks."
+    )
+
+    # 3. Call the agent with system + user
+    result = agent.invoke(
+        {
+            "messages": [
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": EK_item},
+            ]
+        }
+    )
+    return result["messages"][-1].content
 
 if __name__ == "__main__":
     msgs, docs = get_sections(
