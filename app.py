@@ -3,6 +3,10 @@ import json
 import streamlit as st
 from contextlib import contextmanager
 from agent import get_sections
+import time
+from egenkontroll_extract import process_egenkontroll_document
+
+
 from db import (
     SessionLocal,
     init_db,
@@ -109,7 +113,7 @@ def create_from_upload(uploaded_file, user_name: str, checklist_name: str, conte
 
 
 
-def generate_checklist(uploaded_file, user_name, checklist_name):
+def generate_checklist(uploaded_file, user_name, checklist_name, progress_bar):
     """
     From an uploaded JSON file of EK_items, call get_sections(ek_item_text) for each.
 
@@ -122,24 +126,41 @@ def generate_checklist(uploaded_file, user_name, checklist_name):
 
     # ---- Basic file-type handling ----
     if uploaded_file.name.endswith(".pdf"):
-        # matches upload_dialog's NotImplementedError branch
-        raise NotImplementedError("PDF checklists not supported yet.")
-    if uploaded_file.name.endswith(".json"):
+        ek_items = list(process_egenkontroll_document(uploaded_file))
+        st.write(ek_items)
+
+    elif uploaded_file.name.endswith(".json"):
         ek_items = json.load(uploaded_file) # the list of inspection points
-        sections = []
-        section_texts = []
-        for item in ek_items:
-            message, doc_dict = get_sections(item)
-            st.write(message)
+    else:
+        raise Exception("Must be pdf or json")
+
+    sections = []
+    section_texts = []
+    counter = 0
+    def get_text(x):
+        if x < .3:
+            return "Analyzing conditions..."
+        if x < .6:
+            return "Referencing building codes..."
+        return "Generating checklist..."
+    for item in ek_items:
+        counter += 1
+        done_prop = float(counter/len(ek_items))
+        progress_bar.progress(done_prop,text=get_text(done_prop))
+        message, doc_dict = get_sections(item)
+        try:
             codes = json.loads(message)
             code_texts = []
             for code in codes:
                 code_texts.append(doc_dict[code])
             sections.append(message)
             section_texts.append(json.dumps(code_texts))
+        except:
+            sections.append(json.dumps([]))
+            section_texts.append(json.dumps([]))
 
    
-        return (ek_items, sections, section_texts)
+    return (ek_items, sections, section_texts)
 
 
 
@@ -167,7 +188,8 @@ def upload_dialog():
             return
 
         try:
-            content = generate_checklist(uploaded_file, user_name, checklist_name)
+            progress_bar = st.progress(0.0, text="Reading egenkontroll eocument")
+            content = generate_checklist(uploaded_file, user_name, checklist_name, progress_bar)
         except NotImplementedError:
             st.error("PDF parsing is not implemented yet.")
             return
@@ -183,6 +205,7 @@ def upload_dialog():
 
         create_from_upload(uploaded_file, user_name, checklist_name, content)
         st.success(f"Checklist '{checklist_name}' created successfully.")
+        time.sleep(.5)
         st.rerun()
 
 
@@ -292,31 +315,31 @@ else:
                     st.caption("✅" if new_done else "⏳")
 
         st.markdown("---")
-        st.markdown("### Add new item")
-        with st.form(f"add_item_form_{checklist.id}", clear_on_submit=True):
-            label = st.text_input("Label", key=f"label_{checklist.id}")
-            category = st.text_input("Category", key=f"category_{checklist.id}")
-            bbr_sections = st.text_input(
-                'BBR sections JSON (e.g. ["5:12","5:251"])',
-                key=f"bbr_sections_{checklist.id}",
-            )
-            bbr_texts = st.text_area(
-                'BBR texts JSON (e.g. ["text for 5:12", "text for 5:251"])',
-                key=f"bbr_texts_{checklist.id}",
-            )
-            submitted = st.form_submit_button("Add item")
-            if submitted:
-                if not label or not category:
-                    st.error("Label and category are required.")
-                else:
-                    with get_db() as db:
-                        add_item(
-                            db,
-                            checklist_id=checklist.id,
-                            label=label,
-                            category=category,
-                            bbr_sections=bbr_sections,
-                            bbr_texts=bbr_texts,
-                        )
-                    st.success("Item added.")
-                    st.rerun()
+        with st.expander("Add new item"):
+            with st.form(f"add_item_form_{checklist.id}", clear_on_submit=True):
+                label = st.text_input("Label", key=f"label_{checklist.id}")
+                category = st.text_input("Category", key=f"category_{checklist.id}")
+                bbr_sections = st.text_input(
+                    'BBR sections JSON (e.g. ["5:12","5:251"])',
+                    key=f"bbr_sections_{checklist.id}",
+                )
+                bbr_texts = st.text_area(
+                    'BBR texts JSON (e.g. ["text for 5:12", "text for 5:251"])',
+                    key=f"bbr_texts_{checklist.id}",
+                )
+                submitted = st.form_submit_button("Add item")
+                if submitted:
+                    if not label or not category:
+                        st.error("Label and category are required.")
+                    else:
+                        with get_db() as db:
+                            add_item(
+                                db,
+                                checklist_id=checklist.id,
+                                label=label,
+                                category=category,
+                                bbr_sections=bbr_sections,
+                                bbr_texts=bbr_texts,
+                            )
+                        st.success("Item added.")
+                        st.rerun()
