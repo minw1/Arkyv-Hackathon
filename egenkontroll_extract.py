@@ -34,7 +34,7 @@ def extract_control_points_with_ai(text, api_key=None):
 
 Your task is to extract ONLY the actual control points (kontrollpunkter/riktlinjer) from this document. 
 
-IMPORTANT: A single control point may contain MULTIPLE related paragraphs or sentences that form one coherent requirement. Keep these together as ONE item. 
+IMPORTANT: A single control point may contain MULTIPLE related paragraphs or sentences that form one coherent requirement. Keep these together as ONE item. For example, if a control point describes material selection requirements across several paragraphs, they should be combined into a single control point entry.
 
 Control points are substantive requirements, checks, or quality criteria that need to be verified during construction. They typically describe:
 - Design requirements (projektering)
@@ -48,6 +48,7 @@ Control points are substantive requirements, checks, or quality criteria that ne
 
 When extracting control points:
 - Keep related paragraphs together as ONE control point (e.g., material selection requirements that span multiple paragraphs)
+- Look for thematic groupings - if multiple paragraphs discuss the same topic or requirement area, combine them
 - Each control point should represent a distinct requirement or check, even if it's described across multiple sentences/paragraphs
 
 DO NOT extract:

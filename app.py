@@ -36,6 +36,10 @@ if "bbr_dialog_section" not in st.session_state:
     st.session_state.bbr_dialog_section = None
 if "bbr_dialog_text" not in st.session_state:
     st.session_state.bbr_dialog_text = None
+if "filter_category" not in st.session_state:
+    st.session_state.filter_category = "All"
+if "filter_status" not in st.session_state:
+    st.session_state.filter_status = "All"
 
 def set_active_checklist(checklist_id: int):
     st.session_state.active_checklist_id = checklist_id
@@ -238,11 +242,78 @@ else:
             st.markdown(f"**Last updated:** {checklist.updated_at}")
         st.markdown("---")
 
+        # --- Progress bar + completed count ---
+        total_items = len(items)
+        completed_items = sum(1 for it in items if it.is_done) if total_items else 0
+        progress = completed_items / total_items if total_items else 0.0
+
+        p_left, p_middle, p_right = st.columns([2, 1, 4])
+        with p_left:
+            st.progress(progress)
+        with p_middle:
+            st.markdown(f"**{completed_items}/{total_items} completed**")
+        # p_right stays empty to push everything left
+
         if not items:
             st.info("No items yet. Add one below.")
         else:
+            # NEW CODE:
             st.markdown("### Items")
-            for item in items:
+
+            # --- Filters ---
+            # Get unique categories from items
+            all_categories = sorted(list(set(item.category for item in items if item.category)))
+            categories_options = ["All"] + all_categories
+            
+            filter_col1, filter_col2, filter_col3 = st.columns([2, 2, 6])
+            with filter_col1:
+                filter_category = st.selectbox(
+                    "Filter by Category",
+                    options=categories_options,
+                    index=categories_options.index(st.session_state.filter_category) if st.session_state.filter_category in categories_options else 0,
+                    key="filter_category_select"
+                )
+                st.session_state.filter_category = filter_category
+            
+            with filter_col2:
+                filter_status = st.selectbox(
+                    "Filter by Status",
+                    options=["All", "Completed", "Pending"],
+                    index=["All", "Completed", "Pending"].index(st.session_state.filter_status),
+                    key="filter_status_select"
+                )
+                st.session_state.filter_status = filter_status
+
+            # Apply filters
+            filtered_items = items
+            if filter_category != "All":
+                filtered_items = [item for item in filtered_items if item.category == filter_category]
+            if filter_status == "Completed":
+                filtered_items = [item for item in filtered_items if item.is_done]
+            elif filter_status == "Pending":
+                filtered_items = [item for item in filtered_items if not item.is_done]
+
+            # Show filtered count
+            if len(filtered_items) < len(items):
+                st.caption(f"Showing {len(filtered_items)} of {len(items)} items")
+
+            # Header row for the columns
+            hdr_done, hdr_label, hdr_cat, hdr_bbr, hdr_status = st.columns(
+                [0.5, 3.5, 2, 4, 1.5]
+            )
+
+            with hdr_done:
+                st.write("")  # empty header for the checkbox column
+            with hdr_label:
+                st.markdown("**Control point**")
+            with hdr_cat:
+                st.markdown("**Category**")
+            with hdr_bbr:
+                st.markdown("**BBR Sections**")
+            with hdr_status:
+                st.markdown("**Status**")
+
+            for item in filtered_items:
                 col_done, col_label, col_cat, col_bbr, col_status = st.columns(
                     [0.5, 3.5, 2, 4, 1.5]
                 )
