@@ -18,7 +18,9 @@ from db import (
     set_item_done,
 )
 
-st.set_page_config(page_title="Egenkontroll Projects", layout="wide")
+st.set_page_config(page_title="Egenkontroll Projects", layout="wide", )
+
+
 st.title("Egenkontroll Projects")
 all_categories = ["beständighet", "hälsa och inomhusklimat", "ljusinsläpp","miljöppåverkan", "resurshållning", "bullerskydd", "energihushållning", "fuktskydd", "trafik och kommunikation", "annat"]
 CATEGORY_STYLES = {
@@ -89,6 +91,8 @@ if "filter_category" not in st.session_state:
     st.session_state.filter_category = "All"
 if "filter_status" not in st.session_state:
     st.session_state.filter_status = "All"
+if "filter_employee" not in st.session_state:
+    st.session_state.filter_employee = "All"
 
 def set_active_checklist(checklist_id: int):
     st.session_state.active_checklist_id = checklist_id
@@ -347,34 +351,70 @@ else:
             # Get unique categories from items
             all_categories = sorted(list(set(item.category for item in items if item.category)))
             categories_options = ["All"] + all_categories
-            
-            filter_col1, filter_col2, filter_col3 = st.columns([2, 2, 6])
+
+            # Get unique employees from items
+            all_employees = sorted(
+                list(
+                    {
+                        (item.assignment or "").strip()
+                        for item in items
+                        if (item.assignment or "").strip()
+                    }
+                )
+            )
+            employee_options = ["All"] + all_employees
+
+            filter_col1, filter_col2, filter_col3 = st.columns([2, 2, 2])
             with filter_col1:
                 filter_category = st.selectbox(
                     "Filter by Category",
                     options=categories_options,
-                    index=categories_options.index(st.session_state.filter_category) if st.session_state.filter_category in categories_options else 0,
-                    key="filter_category_select"
+                    index=categories_options.index(st.session_state.filter_category)
+                    if st.session_state.filter_category in categories_options
+                    else 0,
+                    key="filter_category_select",
                 )
                 st.session_state.filter_category = filter_category
-            
+
             with filter_col2:
                 filter_status = st.selectbox(
                     "Filter by Status",
                     options=["All", "Completed", "Pending"],
-                    index=["All", "Completed", "Pending"].index(st.session_state.filter_status),
-                    key="filter_status_select"
+                    index=["All", "Completed", "Pending"].index(
+                        st.session_state.filter_status
+                    ),
+                    key="filter_status_select",
                 )
                 st.session_state.filter_status = filter_status
 
+            with filter_col3:
+                filter_employee = st.selectbox(
+                    "Filter by Employee",
+                    options=employee_options,
+                    index=employee_options.index(st.session_state.filter_employee)
+                    if st.session_state.filter_employee in employee_options
+                    else 0,
+                    key="filter_employee_select",
+                )
+                st.session_state.filter_employee = filter_employee
+
             # Apply filters
             filtered_items = items
+
             if filter_category != "All":
                 filtered_items = [item for item in filtered_items if item.category == filter_category]
+
             if filter_status == "Completed":
                 filtered_items = [item for item in filtered_items if item.is_done]
             elif filter_status == "Pending":
                 filtered_items = [item for item in filtered_items if not item.is_done]
+
+            if filter_employee != "All":
+                filtered_items = [
+                    item
+                    for item in filtered_items
+                    if (item.assignment or "").strip() == filter_employee
+                ]
 
             # Show filtered count
             if len(filtered_items) < len(items):
@@ -444,7 +484,10 @@ else:
                                     st.session_state["bbr_dialog_text"] = text
                                     bbr_dialog()
                 with col_ass:
-                    st.text(item.assignment)
+                    if item.assignment == "AI Daylight Calculation Agent":
+                        st.link_button("Launch Daylight Analysis Agent", "https://www.arkyv.ai/", type="secondary")
+                    else:
+                        st.text(item.assignment)
 
         st.markdown("---")
         with st.expander("Add new item"):
