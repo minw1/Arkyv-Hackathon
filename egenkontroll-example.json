@@ -1,5 +1,4 @@
-{
-    "kontrollpunkter": [
+[
         "Ventilationssystemet utformas så att god avskiljning av partiklar och andra föroreningar i tilluft uppnås. Beakta placering av luftintag avseende avgaser. Beakta behovet av öppningsbara fönster.",
         "Avskärma kraftiga elektriska och magnetiska fält, t.ex. från byggnadens ställverk och el-central.",
         "Utföra gröna tak för att öka grönmassan i bebyggelsen och som bidrar till att rena regnvatten samt ett mindre och jämnare dagvattenflöde.",
@@ -7,5 +6,5 @@
         "Planera för goda förhållanden avseende dagsljus och solljus, i bostaden och på uteplatsen.",
         "Utforma byggnadernas klimatskal och system för långsiktig energihushållning.",
         "Planera för cyklar och skapa säkra och väderskyddade utrymmen för cykelparkering."
-    ]
-}
+]
+
