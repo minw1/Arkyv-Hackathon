@@ -2,7 +2,7 @@
 import json
 import streamlit as st
 from contextlib import contextmanager
-from agent import get_sections
+from agent import get_sections, get_category
 import time
 from egenkontroll_extract import process_egenkontroll_document
 
@@ -20,6 +20,51 @@ from db import (
 
 st.set_page_config(page_title="Egenkontroll Lists", layout="wide")
 st.title("Egenkontroll Lists")
+all_categories = ["beständighet", "hälsa och inomhusklimat", "ljusinsläpp","miljöppåverkan", "resurshållning", "bullerskydd", "energihushållning", "fuktskydd", "trafik och kommunikation", "annat"]
+CATEGORY_STYLES = {
+    "beständighet": {"color": "#2563EB", "emoji": "🧱"},   # blue
+    "hälsa och inomhusklimat": {"color": "#16A34A", "emoji": "🌿"},  # green
+    "ljusinsläpp": {"color": "#EAB308", "emoji": "☀️"},  # toned down amber
+    "miljöppåverkan": {"color": "#22C55E", "emoji": "🌍"},  # light green
+    "resurshållning": {"color": "#0EA5E9", "emoji": "♻️"},  # cyan
+    "bullerskydd": {"color": "#8B5CF6", "emoji": "🔇"},  # violet
+    "energihushållning": {"color": "#F97316", "emoji": "⚡"},  # orange
+    "fuktskydd": {"color": "#06B6D4", "emoji": "💧"},  # teal
+    "trafik och kommunikation": {"color": "#EC4899", "emoji": "🚦"},  # pink
+    "annat": {"color": "#6B7280", "emoji": "📁"},  # gray
+}
+
+def category_badge(category: str):
+    """Render a consistent-width, outlined, left-aligned category badge."""
+    style = CATEGORY_STYLES.get(category, {"color": "#6B7280", "emoji": "❓"})
+    main_color = style["color"]
+
+    html = f"""
+    <div style="
+        display:inline-flex;
+        align-items:center;
+        justify-content:flex-start;
+        gap:0.4rem;
+        padding:0.25rem 0.6rem;
+        border-radius:999px;
+        background-color:{main_color}20;  /* subtle fill */
+        border:2px solid {main_color};    /* bright outline */
+        font-size:0.8rem;
+        font-family:system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+        color:var(--text-color);
+        font-weight:500;
+        white-space:nowrap;
+        min-width:8.5rem;
+        max-width:8.5rem;
+        overflow:hidden;
+        text-overflow:ellipsis;
+    ">
+        <span style="flex-shrink:0;">{style['emoji']}</span>
+        <span style="overflow:hidden;text-overflow:ellipsis;">{category}</span>
+    </div>
+    """
+    return html
+
 
 # ---------- DB session management ----------
 @contextmanager
@@ -67,14 +112,15 @@ def create_from_upload(uploaded_file, user_name: str, checklist_name: str, conte
     if not user_name or not checklist_name or not uploaded_file or not content:
         return
 
-    ek_items, sections, section_texts = content
+    ek_items, sections, section_texts, categories = content
 
     # Safety: lengths must align 1:1
     if not (
         isinstance(ek_items, list)
         and isinstance(sections, list)
         and isinstance(section_texts, list)
-        and len(ek_items) == len(sections) == len(section_texts)
+        and isinstance(categories, list)
+        and len(ek_items) == len(sections) == len(section_texts) == len(categories)
     ):
         # You can replace this with st.error(...) if you prefer UI feedback
         raise ValueError("Checklist generation produced misaligned data.")
@@ -83,21 +129,11 @@ def create_from_upload(uploaded_file, user_name: str, checklist_name: str, conte
         checklist = create_checklist(db, user_name=user_name, checklist_name=checklist_name)
         checklist_id = checklist.id
 
-        for ek_item, bbr_sections_json, bbr_texts_json in zip(
-            ek_items, sections, section_texts
+        for ek_item, bbr_sections_json, bbr_texts_json, category in zip(
+            ek_items, sections, section_texts, categories
         ):
-            # Heuristic: pull label/category from the original ek_item
-            if isinstance(ek_item, dict):
-                label = (
-                    ek_item.get("label")
-                    or ek_item.get("text")
-                    or ek_item.get("name")
-                    or str(ek_item)
-                )
-                category = ek_item.get("category") or "General"
-            else:
-                label = str(ek_item)
-                category = "General"
+
+            label = str(ek_item)
 
             if not label:
                 label = "Untitled item"
@@ -110,6 +146,7 @@ def create_from_upload(uploaded_file, user_name: str, checklist_name: str, conte
                 bbr_sections=bbr_sections_json,
                 bbr_texts=bbr_texts_json,
             )
+    st.session_state.active_checklist_id = checklist_id
 
 
 
@@ -127,7 +164,7 @@ def generate_checklist(uploaded_file, user_name, checklist_name, progress_bar):
     # ---- Basic file-type handling ----
     if uploaded_file.name.endswith(".pdf"):
         ek_items = list(process_egenkontroll_document(uploaded_file))
-        st.write(ek_items)
+        #st.write(ek_items)
 
     elif uploaded_file.name.endswith(".json"):
         ek_items = json.load(uploaded_file) # the list of inspection points
@@ -136,6 +173,7 @@ def generate_checklist(uploaded_file, user_name, checklist_name, progress_bar):
 
     sections = []
     section_texts = []
+    categories = []
     counter = 0
     def get_text(x):
         if x < .3:
@@ -148,6 +186,11 @@ def generate_checklist(uploaded_file, user_name, checklist_name, progress_bar):
         done_prop = float(counter/len(ek_items))
         progress_bar.progress(done_prop,text=get_text(done_prop))
         message, doc_dict = get_sections(item)
+        category = get_category(item)
+        st.write(category)
+        if not category in all_categories:
+            category = "annat"
+        categories.append(category)
         try:
             codes = json.loads(message)
             code_texts = []
@@ -160,7 +203,7 @@ def generate_checklist(uploaded_file, user_name, checklist_name, progress_bar):
             section_texts.append(json.dumps([]))
 
    
-    return (ek_items, sections, section_texts)
+    return (ek_items, sections, section_texts, categories)
 
 
 
@@ -188,7 +231,7 @@ def upload_dialog():
             return
 
         try:
-            progress_bar = st.progress(0.0, text="Reading egenkontroll eocument")
+            progress_bar = st.progress(0.0, text="Reading egenkontroll document")
             content = generate_checklist(uploaded_file, user_name, checklist_name, progress_bar)
         except NotImplementedError:
             st.error("PDF parsing is not implemented yet.")
@@ -282,7 +325,7 @@ else:
                     st.markdown(label_text)
                 # --- Category ---
                 with col_cat:
-                    st.caption(item.category)
+                    st.html(category_badge(item.category))
                 # --- BBR sections (max 5 consistent-width buttons) ---
                 with col_bbr:
                     try:
