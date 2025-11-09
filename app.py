@@ -2,10 +2,10 @@
 import json
 import streamlit as st
 from contextlib import contextmanager
-from agent import get_sections, get_category
+from agent import get_sections, get_category, get_assignment
 import time
 from egenkontroll_extract import process_egenkontroll_document
-
+from pdfminer.high_level import extract_text
 
 from db import (
     SessionLocal,
@@ -18,8 +18,8 @@ from db import (
     set_item_done,
 )
 
-st.set_page_config(page_title="Egenkontroll Lists", layout="wide")
-st.title("Egenkontroll Lists")
+st.set_page_config(page_title="Egenkontroll Projects", layout="wide")
+st.title("Egenkontroll Projects")
 all_categories = ["beständighet", "hälsa och inomhusklimat", "ljusinsläpp","miljöppåverkan", "resurshållning", "bullerskydd", "energihushållning", "fuktskydd", "trafik och kommunikation", "annat"]
 CATEGORY_STYLES = {
     "beständighet": {"color": "#2563EB", "emoji": "🧱"},   # blue
@@ -107,16 +107,16 @@ def bbr_dialog():
 
 
 # ---------- Checklist creation (from upload) ----------
-def create_from_upload(uploaded_file, user_name: str, checklist_name: str, content):
+def create_from_upload(user_name: str, checklist_name: str, content):
     """
     Use the output from generate_checklist(...) to create DB rows.
 
     content: (ek_items, sections, section_texts)
     """
-    if not user_name or not checklist_name or not uploaded_file or not content:
+    if not user_name or not checklist_name or not content:
         return
 
-    ek_items, sections, section_texts, categories = content
+    ek_items, sections, section_texts, categories, assignments = content
 
     # Safety: lengths must align 1:1
     if not (
@@ -124,7 +124,8 @@ def create_from_upload(uploaded_file, user_name: str, checklist_name: str, conte
         and isinstance(sections, list)
         and isinstance(section_texts, list)
         and isinstance(categories, list)
-        and len(ek_items) == len(sections) == len(section_texts) == len(categories)
+        and isinstance(assignments, list)
+        and len(ek_items) == len(sections) == len(section_texts) == len(categories) == len(assignments)
     ):
         # You can replace this with st.error(...) if you prefer UI feedback
         raise ValueError("Checklist generation produced misaligned data.")
@@ -133,8 +134,8 @@ def create_from_upload(uploaded_file, user_name: str, checklist_name: str, conte
         checklist = create_checklist(db, user_name=user_name, checklist_name=checklist_name)
         checklist_id = checklist.id
 
-        for ek_item, bbr_sections_json, bbr_texts_json, category in zip(
-            ek_items, sections, section_texts, categories
+        for ek_item, bbr_sections_json, bbr_texts_json, category, assignment in zip(
+            ek_items, sections, section_texts, categories, assignments
         ):
 
             label = str(ek_item)
@@ -147,6 +148,7 @@ def create_from_upload(uploaded_file, user_name: str, checklist_name: str, conte
                 checklist_id=checklist_id,
                 label=label,
                 category=category,
+                assignment = assignment,
                 bbr_sections=bbr_sections_json,
                 bbr_texts=bbr_texts_json,
             )
@@ -154,7 +156,7 @@ def create_from_upload(uploaded_file, user_name: str, checklist_name: str, conte
 
 
 
-def generate_checklist(uploaded_file, user_name, checklist_name, progress_bar):
+def generate_checklist(uploaded_file, employee_file, user_name, checklist_name, progress_bar):
     """
     From an uploaded JSON file of EK_items, call get_sections(ek_item_text) for each.
 
@@ -165,19 +167,28 @@ def generate_checklist(uploaded_file, user_name, checklist_name, progress_bar):
                        ['["text for 8:41","text for 8:42"]', '["text for 7:41"]', ...]
     """
 
+    
+    
+    employee_info = None
+    if employee_file:
+        if employee_file.name.endswith(".pdf"):
+            employee_info = extract_text(employee_file)
+
     # ---- Basic file-type handling ----
     if uploaded_file.name.endswith(".pdf"):
         ek_items = list(process_egenkontroll_document(uploaded_file))
         #st.write(ek_items)
-
     elif uploaded_file.name.endswith(".json"):
         ek_items = json.load(uploaded_file) # the list of inspection points
+
     else:
         raise Exception("Must be pdf or json")
 
     sections = []
     section_texts = []
     categories = []
+    assignments = []
+
     counter = 0
     def get_text(x):
         if x < .3:
@@ -191,7 +202,12 @@ def generate_checklist(uploaded_file, user_name, checklist_name, progress_bar):
         progress_bar.progress(done_prop,text=get_text(done_prop))
         message, doc_dict = get_sections(item)
         category = get_category(item)
-        st.write(category)
+        if employee_info:
+            assignment = get_assignment(employee_info, item)
+            assignments.append(assignment)
+        else:
+            assignments.append("")
+
         if not category in all_categories:
             category = "annat"
         categories.append(category)
@@ -207,25 +223,26 @@ def generate_checklist(uploaded_file, user_name, checklist_name, progress_bar):
             section_texts.append(json.dumps([]))
 
    
-    return (ek_items, sections, section_texts, categories)
+    return (ek_items, sections, section_texts, categories, assignments)
 
 
 
 
 
     
-@st.dialog("Create checklist from file")
+@st.dialog("Create project from file")
 def upload_dialog():
     left, right = st.columns(2)
-    checklist_name = left.text_input("Checklist Name")
+    checklist_name = left.text_input("Project Name")
     user_name = right.text_input("User Name")
     uploaded_file = st.file_uploader("Egenkontroll File", type=["pdf", "json"])
+    employee_spec = st.file_uploader("Employee Specification File (Optional)", type=["pdf"])
 
     create_clicked = st.button("Create")
 
     if create_clicked:
         if not checklist_name.strip():
-            st.error("Please enter a checklist name.")
+            st.error("Please enter a project name.")
             return
         if not user_name.strip():
             st.error("Please enter a user name.")
@@ -236,12 +253,12 @@ def upload_dialog():
 
         try:
             progress_bar = st.progress(0.0, text="Reading egenkontroll document")
-            content = generate_checklist(uploaded_file, user_name, checklist_name, progress_bar)
+            content = generate_checklist(uploaded_file, employee_spec, user_name, checklist_name, progress_bar)
         except NotImplementedError:
             st.error("PDF parsing is not implemented yet.")
             return
         except Exception as e:
-            st.error("We could not generate a checklist from this file.")
+            st.error("We could not generate a project checklist from this file.")
             # Uncomment if you want debugging info during hackathon:
             st.exception(e)
             return
@@ -250,7 +267,7 @@ def upload_dialog():
             st.error("Checklist generation returned no content.")
             return
 
-        create_from_upload(uploaded_file, user_name, checklist_name, content)
+        create_from_upload(user_name, checklist_name, content)
         st.success(f"Checklist '{checklist_name}' created successfully.")
         time.sleep(.5)
         st.rerun()
@@ -262,9 +279,9 @@ with get_db() as db:
 
 # ---------- Sidebar ----------
 with st.sidebar:
-    st.title("Checklists")
+    st.title("Projects")
     if not checklists:
-        st.info("No checklists yet.")
+        st.info("No projects yet.")
     else:
         for cl in checklists:
             label = cl.checklist_name
@@ -288,9 +305,9 @@ if active_id is None and checklists:
     st.session_state.active_checklist_id = active_id
 
 if not checklists:
-    st.write("👉 Create a checklist from the sidebar to get started.")
+    st.write("👉 Create a project from the sidebar to get started.")
 elif active_id is None:
-    st.write("👉 Select a checklist from the sidebar.")
+    st.write("👉 Select a project from the sidebar.")
 else:
     with get_db() as db:
         checklist = get_checklist(db, active_id)
@@ -299,13 +316,13 @@ else:
     if not checklist:
         st.error("Selected checklist not found.")
     else:
-        c1, c2, c3 = st.columns([3, 2, 2])
+        c1, c2, c3 = st.columns([3, 2, 2],vertical_alignment="bottom")
         with c1:
             st.subheader(checklist.checklist_name)
         with c2:
-            st.markdown(f"**User:** {checklist.user_name}")
+            st.markdown(f"**Created By:** {checklist.user_name}")
         with c3:
-            st.markdown(f"**Last updated:** {checklist.updated_at}")
+            st.markdown(f"**Last updated:** {checklist.updated_at[:10]}")
         st.markdown("---")
 
         # --- Progress bar + completed count ---
@@ -363,9 +380,11 @@ else:
             if len(filtered_items) < len(items):
                 st.caption(f"Showing {len(filtered_items)} of {len(items)} items")
 
+
+            column_ratios = [0.5, 4, 1.6, 3, 2]
             # Header row for the columns
-            hdr_done, hdr_label, hdr_cat, hdr_bbr, hdr_status = st.columns(
-                [0.5, 3.5, 2, 4, 1.5]
+            hdr_done, hdr_label, hdr_cat, hdr_bbr, assign = st.columns(
+                column_ratios
             )
 
             with hdr_done:
@@ -376,12 +395,13 @@ else:
                 st.markdown("**Category**")
             with hdr_bbr:
                 st.markdown("**BBR Sections**")
-            with hdr_status:
-                st.markdown("**Status**")
+            with assign:
+                st.markdown("**Responsible Employee**")
+
 
             for item in filtered_items:
-                col_done, col_label, col_cat, col_bbr, col_status = st.columns(
-                    [0.5, 3.5, 2, 4, 1.5]
+                col_done, col_label, col_cat, col_bbr, col_ass = st.columns(
+                    column_ratios
                 )
                 # --- Done checkbox ---
                 with col_done:
@@ -423,10 +443,8 @@ else:
                                     st.session_state["bbr_dialog_section"] = section_label
                                     st.session_state["bbr_dialog_text"] = text
                                     bbr_dialog()
-
-                # --- Status ---
-                with col_status:
-                    st.caption("✅" if new_done else "⏳")
+                with col_ass:
+                    st.text(item.assignment)
 
         st.markdown("---")
         with st.expander("Add new item"):
