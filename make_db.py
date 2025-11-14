@@ -18,7 +18,7 @@ vector_store = Chroma(
 )
 
 
-with open("chunks.pkl","rb") as file:
+with open("ek_chunks.pkl","rb") as file:
     chunks = pickle.load(file)
     chunks = chunks[59:] # skip the table of contents
 
